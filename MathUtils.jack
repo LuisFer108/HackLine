@@ -1,0 +1,54 @@
+/**
+ * Utilidades matematicas de bajo nivel:
+ * - Tabla de potencias de 2 para desplazamientos bit a bit sin multiplicaciones lentas.
+ * - Generador congruencial lineal (PRNG) y deteccion de colisiones AABB.
+ */
+class MathUtils {
+    static Array powersOfTwo;
+    static int seed;
+
+    function void init() {
+        let powersOfTwo = Array.new(16);
+        let powersOfTwo[0]  = 1;
+        let powersOfTwo[1]  = 2;
+        let powersOfTwo[2]  = 4;
+        let powersOfTwo[3]  = 8;
+        let powersOfTwo[4]  = 16;
+        let powersOfTwo[5]  = 32;
+        let powersOfTwo[6]  = 64;
+        let powersOfTwo[7]  = 128;
+        let powersOfTwo[8]  = 256;
+        let powersOfTwo[9]  = 512;
+        let powersOfTwo[10] = 1024;
+        let powersOfTwo[11] = 2048;
+        let powersOfTwo[12] = 4096;
+        let powersOfTwo[13] = 8192;
+        let powersOfTwo[14] = 16384;
+        let powersOfTwo[15] = ~32767; // -32768 (bit 15 activo)
+
+        let seed = 1337;
+        return;
+    }
+
+    function int pow2(int i) {
+        return powersOfTwo[i];
+    }
+
+    /** Genera un entero pseudoaleatorio en [0, max - 1] */
+    function int nextRand(int max) {
+        var int q;
+        let seed = (seed * 251) + 1013;
+        let seed = seed & 32767;
+        let q = seed / max;
+        return seed - (q * max);
+    }
+
+    /** Deteccion de colision por cajas delimitadoras (AABB) */
+    function boolean checkCollision(int x1, int y1, int s1, int x2, int y2, int s2) {
+        if ((x1 + s1) < x2) { return false; }
+        if ((x2 + s2) < x1) { return false; }
+        if ((y1 + s1) < y2) { return false; }
+        if ((y2 + s2) < y1) { return false; }
+        return true;
+    }
+}

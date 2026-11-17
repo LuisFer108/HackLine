@@ -1,0 +1,248 @@
+/**
+ * Motor principal de HACKLINE: 0xFFFF.
+ * - Lectura no bloqueante de teclado.
+ * - Scrolling continuo del bus de datos via Memory.poke directo.
+ * - Marcador dinamico y multiplicador de combo por ciclos.
+ */
+class HacklineGame {
+    field Player player;
+    field Disc disc;
+    field Array enemies;
+    field int numEnemies;
+    field int score;
+    field int combo;
+    field int comboTimer;
+    field int scrollOffset;
+    field int frameCount;
+    field boolean gameOver;
+
+    constructor HacklineGame new() {
+        var int i;
+
+        do Screen.clearScreen();
+        let player = Player.new(240, 200);
+        let disc = Disc.new();
+        let numEnemies = 4;
+        let enemies = Array.new(numEnemies);
+
+        let i = 0;
+        while (i < numEnemies) {
+            let enemies[i] = Enemy.new(160 + (i * 48), 24 + (i * 22), i + 1);
+            let i = i + 1;
+        }
+
+        let score = 0;
+        let combo = 1;
+        let comboTimer = 0;
+        let scrollOffset = 0;
+        let frameCount = 0;
+        let gameOver = false;
+
+        do drawStaticHUD();
+        return this;
+    }
+
+    /** Dibuja las etiquetas estaticas una sola vez para no saturar el Heap */
+    method void drawStaticHUD() {
+        // Linea separadora superior en VRAM (y = 14)
+        var int addr;
+        let addr = 16384 + (14 * 32) + 8;
+        while (addr < (16384 + (14 * 32) + 24)) {
+            do Memory.poke(addr, -1);
+            let addr = addr + 1;
+        }
+
+        do Output.moveCursor(0, 1);
+        do Output.printString("SCORE:");
+        do Output.moveCursor(0, 16);
+        do Output.printString("COMBO: x");
+        do Output.moveCursor(0, 30);
+        do Output.printString("DISCO:");
+        return;
+    }
+
+    /** Actualiza los valores numericos en pantalla sin asignar Strings */
+    method void updateHUD() {
+        do Output.moveCursor(0, 8);
+        do Output.printInt(score);
+        do Output.printString("   ");
+
+        do Output.moveCursor(0, 24);
+        do Output.printInt(combo);
+        do Output.printString(" ");
+
+        do Output.moveCursor(0, 37);
+        if (disc.isActive()) {
+            do Output.printString("EN AIRE ");
+        } else {
+            do Output.printString("LISTO   ");
+        }
+        return;
+    }
+
+    /**
+     * Desplazamiento visual continuo en memoria de video (VRAM).
+     * Escribe directamente en las columnas 8 (x=128..143) y 23 (x=368..383)
+     * para simular avance a alta velocidad por el bus de datos.
+     */
+    method void updateScrollingBus() {
+        var int y, rowBase, pattern, phase;
+
+        let scrollOffset = scrollOffset + 2;
+        if (scrollOffset > 15) {
+            let scrollOffset = 0;
+        }
+
+        let y = 16;
+        while (y < 256) {
+            let rowBase = 16384 + (y * 32);
+            let phase = (y - scrollOffset) & 15;
+
+            if (phase < 4) {
+                // Marcas horizontales del bus desplazandose hacia abajo
+                let pattern = -1;
+            } else {
+                // Rieles laterales del bus de datos
+                let pattern = 12291; // Binario: 0011000000000011
+            }
+
+            do Memory.poke(rowBase + 8, pattern);
+            do Memory.poke(rowBase + 23, pattern);
+            let y = y + 1;
+        }
+        return;
+    }
+
+    /** Procesa entradas de teclado en tiempo real sin pausas bloqueantes */
+    method void handleInput() {
+        var char key;
+        var int dx, dy;
+
+        let key = Keyboard.keyPressed();
+        let dx = 0;
+        let dy = 0;
+
+        // W (87) o Flecha Arriba (131)
+        if ((key = 87) | (key = 131)) {
+            let dy = -4;
+        }
+        // S (83) o Flecha Abajo (133)
+        if ((key = 83) | (key = 133)) {
+            let dy = 4;
+        }
+        // A (65) o Flecha Izquierda (130)
+        if ((key = 65) | (key = 130)) {
+            let dx = -4;
+        }
+        // D (68) o Flecha Derecha (132)
+        if ((key = 68) | (key = 132)) {
+            let dx = 4;
+        }
+
+        if ((~(dx = 0)) | (~(dy = 0))) {
+            do player.move(dx, dy);
+        }
+
+        // ESPACIO (32): Lanza el Disco de Puntero
+        if ((key = 32) & (~(disc.isActive()))) {
+            do disc.launch(player.getX(), player.getY(), player.getAimX(), player.getAimY());
+        }
+        return;
+    }
+
+    /** Bucle principal de ejecucion */
+    method void run() {
+        var int i;
+        var Enemy enemy;
+        var char key;
+
+        while (~gameOver) {
+            let frameCount = frameCount + 1;
+
+            // 1. Actualizar entorno dinamico (Scrolling en VRAM)
+            do updateScrollingBus();
+
+            // 2. Leer teclado sin bloquear
+            do handleInput();
+
+            // 3. Actualizar fisica del Disco de Puntero
+            if (disc.isActive()) {
+                do disc.update();
+            }
+
+            // 4. Actualizar enemigos y verificar colisiones
+            let i = 0;
+            while (i < numEnemies) {
+                let enemy = enemies[i];
+                do enemy.update(player.getX(), player.getY(), frameCount);
+
+                // Colision Disco -> Enemigo (Eliminacion)
+                if (disc.isActive()) {
+                    if (MathUtils.checkCollision(disc.getX(), disc.getY(), 10, enemy.getX(), enemy.getY(), 14)) {
+                        do enemy.respawn(150 + MathUtils.nextRand(190), 18);
+                        let score = score + (100 * combo);
+                        let combo = combo + 1;
+                        let comboTimer = 110; // Ventana de tiempo para encadenar combo
+                    }
+                }
+
+                // Colision Enemigo -> Jugador (Muerte de un solo impacto)
+                if (MathUtils.checkCollision(player.getX(), player.getY(), 11, enemy.getX(), enemy.getY(), 11)) {
+                    let gameOver = true;
+                }
+
+                let i = i + 1;
+            }
+
+            // 5. Gestionar temporizador de combo
+            if (comboTimer > 0) {
+                let comboTimer = comboTimer - 1;
+                if (comboTimer = 0) {
+                    let combo = 1;
+                }
+            }
+
+            // 6. Renderizar entidades y marcador
+            do player.draw();
+            if (disc.isActive()) {
+                do disc.draw();
+            }
+            do updateHUD();
+
+            do Sys.wait(16);
+        }
+
+        // Pantalla de Game Over con reinicio instantaneo (R = 82)
+        do Output.moveCursor(11, 18);
+        do Output.printString("== PROCESO TERMINADO ==");
+        do Output.moveCursor(13, 20);
+        do Output.printString("PUNTAJE FINAL: ");
+        do Output.printInt(score);
+        do Output.moveCursor(15, 16);
+        do Output.printString("PRESIONA 'R' PARA REINICIAR");
+
+        let key = 0;
+        while (~(key = 82)) {
+            let key = Keyboard.keyPressed();
+        }
+        return;
+    }
+
+    method void dispose() {
+        var int i;
+        var Enemy enemy;
+
+        do player.dispose();
+        do disc.dispose();
+
+        let i = 0;
+        while (i < numEnemies) {
+            let enemy = enemies[i];
+            do enemy.dispose();
+            let i = i + 1;
+        }
+        do enemies.dispose();
+        do Memory.deAlloc(this);
+        return;
+    }
+}

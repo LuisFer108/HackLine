@@ -1,0 +1,106 @@
+/**
+ * Entidad del jugador ("Recolector de Basura").
+ * Renderizado mediante escritura directa de palabras de 16 bits en VRAM.
+ */
+class Player {
+    field int x, y;
+    field int aimX, aimY;
+    field Array sprite;
+
+    constructor Player new(int startX, int startY) {
+        let x = startX;
+        let y = startY;
+        let aimX = 0;
+        let aimY = -8; // Apunta hacia arriba por defecto
+
+        // Sprite 12x12 del protagonista (valores < 32768 para desplazamiento limpio)
+        let sprite = Array.new(12);
+        let sprite[0]  = 480;   // ....#####...
+        let sprite[1]  = 1008;  // ...#######..
+        let sprite[2]  = 1632;  // ...##...##..
+        let sprite[3]  = 2016;  // ..#######...
+        let sprite[4]  = 960;   // ...######...
+        let sprite[5]  = 4080;  // .##########.
+        let sprite[6]  = 3564;  // .###.##.###.
+        let sprite[7]  = 3564;  // .###.##.###.
+        let sprite[8]  = 960;   // ...######...
+        let sprite[9]  = 864;   // ...##..##...
+        let sprite[10] = 1632;  // ..##....##..
+        let sprite[11] = 1632;  // ..##....##..
+
+        do draw();
+        return this;
+    }
+
+    method void move(int dx, int dy) {
+        do erase();
+        let x = x + dx;
+        let y = y + dy;
+
+        // Limitar movimiento al interior del bus de datos (x: 146..350, y: 20..240)
+        if (x < 146) { let x = 146; }
+        if (x > 350) { let x = 350; }
+        if (y < 20)  { let y = 20; }
+        if (y > 240) { let y = 240; }
+
+        // Actualizar vector de apuntado segun ultima direccion
+        let aimX = dx * 2;
+        let aimY = dy * 2;
+        return;
+    }
+
+    /** Borra el sprite escribiendo 0 directamente en VRAM */
+    method void erase() {
+        var int r, col, addr;
+        let col = x / 16;
+        let r = 0;
+        while (r < 12) {
+            let addr = 16384 + ((y + r) * 32) + col;
+            do Memory.poke(addr, 0);
+            do Memory.poke(addr + 1, 0);
+            let r = r + 1;
+        }
+        return;
+    }
+
+    /** Dibuja el sprite desplazando bits entre dos palabras adyacentes de 16 bits */
+    method void draw() {
+        var int r, col, shift, addr, pat, leftWord, rightWord, powShift, powInv;
+        let col = x / 16;
+        let shift = x - (col * 16);
+        let powShift = MathUtils.pow2(shift);
+
+        if (shift = 0) {
+            let r = 0;
+            while (r < 12) {
+                let addr = 16384 + ((y + r) * 32) + col;
+                do Memory.poke(addr, sprite[r]);
+                let r = r + 1;
+            }
+        } else {
+            let powInv = MathUtils.pow2(16 - shift);
+            let r = 0;
+            while (r < 12) {
+                let pat = sprite[r];
+                let rightWord = pat / powInv;
+                let leftWord = (pat - (rightWord * powInv)) * powShift;
+                let addr = 16384 + ((y + r) * 32) + col;
+                do Memory.poke(addr, leftWord);
+                do Memory.poke(addr + 1, rightWord);
+                let r = r + 1;
+            }
+        }
+        return;
+    }
+
+    method int getX() { return x; }
+    method int getY() { return y; }
+    method int getAimX() { return aimX; }
+    method int getAimY() { return aimY; }
+
+    method void dispose() {
+        do sprite.dispose();
+        do Memory.deAlloc(this);
+        return;
+    }
+}

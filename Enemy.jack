@@ -1,0 +1,117 @@
+/**
+ * Procesos corruptos (enemigos) que avanzan por el bus de datos
+ * y rastrean lateralmente al jugador.
+ */
+class Enemy {
+    field int x, y;
+    field int speedY;
+    field Array sprite;
+
+    constructor Enemy new(int startX, int startY, int speed) {
+        let x = startX;
+        let y = startY;
+        let speedY = speed;
+        if (speedY > 3) { let speedY = 3; }
+
+        // Sprite 12x12 agresivo (calavera / proceso corrupto)
+        let sprite = Array.new(12);
+        let sprite[0]  = 2040;  // ...########.
+        let sprite[1]  = 4092;  // ..##########
+        let sprite[2]  = 3636;  // ..###.##.###
+        let sprite[3]  = 3636;  // ..###.##.###
+        let sprite[4]  = 4092;  // ..##########
+        let sprite[5]  = 1992;  // ...###..###.
+        let sprite[6]  = 4092;  // ..##########
+        let sprite[7]  = 2730;  // ..#.#.#.#.#.
+        let sprite[8]  = 4092;  // ..##########
+        let sprite[9]  = 1008;  // ...#######..
+        let sprite[10] = 612;   // ....##..##..
+        let sprite[11] = 1542;  // ...##....##.
+
+        return this;
+    }
+
+    method void respawn(int newX, int newY) {
+        do erase();
+        let x = newX;
+        let y = newY;
+        if (x < 146) { let x = 146; }
+        if (x > 350) { let x = 350; }
+        return;
+    }
+
+    method void update(int targetX, int targetY, int frame) {
+        do erase();
+
+        let y = y + speedY;
+
+        // Persecucion horizontal suave cada 2 frames
+        if ((frame & 1) = 0) {
+            if (x < targetX) { let x = x + 1; }
+            if (x > targetX) { let x = x - 1; }
+        }
+
+        if (x < 146) { let x = 146; }
+        if (x > 350) { let x = 350; }
+
+        // Si cruza el limite inferior, reaparece arriba
+        if (y > 240) {
+            let y = 18;
+            let x = 150 + MathUtils.nextRand(195);
+        }
+
+        do draw();
+        return;
+    }
+
+    method void erase() {
+        var int r, col, addr;
+        let col = x / 16;
+        let r = 0;
+        while (r < 12) {
+            let addr = 16384 + ((y + r) * 32) + col;
+            do Memory.poke(addr, 0);
+            do Memory.poke(addr + 1, 0);
+            let r = r + 1;
+        }
+        return;
+    }
+
+    method void draw() {
+        var int r, col, shift, addr, pat, leftWord, rightWord, powShift, powInv;
+        let col = x / 16;
+        let shift = x - (col * 16);
+        let powShift = MathUtils.pow2(shift);
+
+        if (shift = 0) {
+            let r = 0;
+            while (r < 12) {
+                let addr = 16384 + ((y + r) * 32) + col;
+                do Memory.poke(addr, sprite[r]);
+                let r = r + 1;
+            }
+        } else {
+            let powInv = MathUtils.pow2(16 - shift);
+            let r = 0;
+            while (r < 12) {
+                let pat = sprite[r];
+                let rightWord = pat / powInv;
+                let leftWord = (pat - (rightWord * powInv)) * powShift;
+                let addr = 16384 + ((y + r) * 32) + col;
+                do Memory.poke(addr, leftWord);
+                do Memory.poke(addr + 1, rightWord);
+                let r = r + 1;
+            }
+        }
+        return;
+    }
+
+    method int getX() { return x; }
+    method int getY() { return y; }
+
+    method void dispose() {
+        do sprite.dispose();
+        do Memory.deAlloc(this);
+        return;
+    }
+}

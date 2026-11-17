@@ -1,0 +1,132 @@
+/**
+ * "Disco de Puntero": Proyectil con cinematica 2D en enteros
+ * y rebote elastico contra las paredes del bus de datos.
+ */
+class Disc {
+    field int x, y;
+    field int vx, vy;
+    field int bounces;
+    field boolean active;
+    field Array sprite;
+
+    constructor Disc new() {
+        let active = false;
+        let sprite = Array.new(8);
+        let sprite[0] = 60;   // ..####..
+        let sprite[1] = 126;  // .######.
+        let sprite[2] = 219;  // ##.##.##
+        let sprite[3] = 255;  // ########
+        let sprite[4] = 255;  // ########
+        let sprite[5] = 219;  // ##.##.##
+        let sprite[6] = 126;  // .######.
+        let sprite[7] = 60;   // ..####..
+        return this;
+    }
+
+    method void launch(int startX, int startY, int dirX, int dirY) {
+        let x = startX;
+        let y = startY;
+        let vx = dirX;
+        let vy = dirY;
+
+        if ((vx = 0) & (vy = 0)) {
+            let vy = -8;
+        }
+        let bounces = 0;
+        let active = true;
+        return;
+    }
+
+    /** Cinematica en enteros y reflexion vectorial en bordes */
+    method void update() {
+        if (~active) { return; }
+
+        do erase();
+        let x = x + vx;
+        let y = y + vy;
+
+        // Rebote contra paredes laterales del bus (Vx = -Vx)
+        if (x < 145) {
+            let x = 145;
+            let vx = -vx;
+            let bounces = bounces + 1;
+        }
+        if (x > 352) {
+            let x = 352;
+            let vx = -vx;
+            let bounces = bounces + 1;
+        }
+
+        // Rebote contra techo y suelo de la arena (Vy = -Vy)
+        if (y < 18) {
+            let y = 18;
+            let vy = -vy;
+            let bounces = bounces + 1;
+        }
+        if (y > 244) {
+            let y = 244;
+            let vy = -vy;
+            let bounces = bounces + 1;
+        }
+
+        // El disco regresa al inventario tras 4 rebotes
+        if (bounces > 4) {
+            let active = false;
+        }
+        return;
+    }
+
+    method void erase() {
+        var int r, col, addr;
+        let col = x / 16;
+        let r = 0;
+        while (r < 8) {
+            let addr = 16384 + ((y + r) * 32) + col;
+            do Memory.poke(addr, 0);
+            do Memory.poke(addr + 1, 0);
+            let r = r + 1;
+        }
+        return;
+    }
+
+    method void draw() {
+        var int r, col, shift, addr, pat, leftWord, rightWord, powShift, powInv;
+        if (~active) { return; }
+
+        let col = x / 16;
+        let shift = x - (col * 16);
+        let powShift = MathUtils.pow2(shift);
+
+        if (shift = 0) {
+            let r = 0;
+            while (r < 8) {
+                let addr = 16384 + ((y + r) * 32) + col;
+                do Memory.poke(addr, sprite[r]);
+                let r = r + 1;
+            }
+        } else {
+            let powInv = MathUtils.pow2(16 - shift);
+            let r = 0;
+            while (r < 8) {
+                let pat = sprite[r];
+                let rightWord = pat / powInv;
+                let leftWord = (pat - (rightWord * powInv)) * powShift;
+                let addr = 16384 + ((y + r) * 32) + col;
+                do Memory.poke(addr, leftWord);
+                do Memory.poke(addr + 1, rightWord);
+                let r = r + 1;
+            }
+        }
+        return;
+    }
+
+    method boolean isActive() { return active; }
+    method int getX() { return x; }
+    method int getY() { return y; }
+
+    method void dispose() {
+        do sprite.dispose();
+        do Memory.deAlloc(this);
+        return;
+    }
+}
