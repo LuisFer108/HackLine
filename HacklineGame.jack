@@ -5,6 +5,12 @@
  * - Marcador dinamico y multiplicador de combo por ciclos.
  */
 class HacklineGame {
+    field int lastHDir;
+    field int hHold;
+    field int lastVDir;
+    field int vHold;
+    field String strAir;
+    field String strReady;
     field Player player;
     field Disc disc;
     field Array enemies;
@@ -18,8 +24,11 @@ class HacklineGame {
 
     constructor HacklineGame new() {
         var int i;
-
         do Screen.clearScreen();
+        let lastHDir = 0;
+        let hHold = 0;
+        let lastVDir = 0;
+        let vHold = 0;
         let player = Player.new(240, 200);
         let disc = Disc.new();
         let numEnemies = 4;
@@ -37,14 +46,23 @@ class HacklineGame {
         let scrollOffset = 0;
         let frameCount = 0;
         let gameOver = false;
-
+        let strAir = "EN AIRE ";
+        let strReady = "LISTO   ";
+        do drawStaticHUD();
+        return this;
         do drawStaticHUD();
         return this;
     }
 
-    /** Dibuja las etiquetas estaticas una sola vez para no saturar el Heap */
+    /** Método auxiliar: imprime un String literal y libera su memoria al instante */
+    method void printAndDispose(String s) {
+        do Output.printString(s);
+        do s.dispose();
+        return;
+    }
+
+    /** Dibuja las etiquetas estáticas liberando los Strings tras imprimirlos */
     method void drawStaticHUD() {
-        // Linea separadora superior en VRAM (y = 14)
         var int addr;
         let addr = 16384 + (14 * 32) + 8;
         while (addr < (16384 + (14 * 32) + 24)) {
@@ -53,29 +71,31 @@ class HacklineGame {
         }
 
         do Output.moveCursor(0, 1);
-        do Output.printString("SCORE:");
+        do printAndDispose("SCORE:");
         do Output.moveCursor(0, 16);
-        do Output.printString("COMBO: x");
+        do printAndDispose("COMBO: x");
         do Output.moveCursor(0, 30);
-        do Output.printString("DISCO:");
+        do printAndDispose("DISCO:");
         return;
     }
 
-    /** Actualiza los valores numericos en pantalla sin asignar Strings */
+    /** Actualiza el HUD con CERO asignaciones en el Heap */
     method void updateHUD() {
         do Output.moveCursor(0, 8);
         do Output.printInt(score);
-        do Output.printString("   ");
+        do Output.printChar(32);
+        do Output.printChar(32);
+        do Output.printChar(32);
 
         do Output.moveCursor(0, 24);
         do Output.printInt(combo);
-        do Output.printString(" ");
+        do Output.printChar(32);
 
         do Output.moveCursor(0, 37);
         if (disc.isActive()) {
-            do Output.printString("EN AIRE ");
+            do Output.printString(strAir);
         } else {
-            do Output.printString("LISTO   ");
+            do Output.printString(strReady);
         }
         return;
     }
@@ -113,37 +133,92 @@ class HacklineGame {
         return;
     }
 
-    /** Procesa entradas de teclado en tiempo real sin pausas bloqueantes */
+    /** Procesa movimiento en 8 direcciones (combinacion WASD/Flechas o teclas Q/E/Z/C) */
     method void handleInput() {
         var char key;
         var int dx, dy;
+        var boolean diagonalKey;
 
         let key = Keyboard.keyPressed();
         let dx = 0;
         let dy = 0;
+        let diagonalKey = false;
 
-        // W (87) o Flecha Arriba (131)
-        if ((key = 87) | (key = 131)) {
-            let dy = -4;
+        // 1. Teclas diagonales directas (evitan limite de 1 tecla en RAM[24576])
+        // Q (81/113): Arriba-Izquierda
+        if ((key = 81) | (key = 113)) {
+            let dx = -3;
+            let dy = -3;
+            let diagonalKey = true;
         }
-        // S (83) o Flecha Abajo (133)
-        if ((key = 83) | (key = 133)) {
-            let dy = 4;
+        // E (69/101): Arriba-Derecha
+        if ((key = 69) | (key = 101)) {
+            let dx = 3;
+            let dy = -3;
+            let diagonalKey = true;
         }
-        // A (65) o Flecha Izquierda (130)
-        if ((key = 65) | (key = 130)) {
-            let dx = -4;
+        // Z (90/122): Abajo-Izquierda
+        if ((key = 90) | (key = 122)) {
+            let dx = -3;
+            let dy = 3;
+            let diagonalKey = true;
         }
-        // D (68) o Flecha Derecha (132)
-        if ((key = 68) | (key = 132)) {
-            let dx = 4;
+        // C (67/99): Abajo-Derecha
+        if ((key = 67) | (key = 99)) {
+            let dx = 3;
+            let dy = 3;
+            let diagonalKey = true;
+        }
+
+        if (diagonalKey) {
+            let hHold = 0;
+            let vHold = 0;
+        } else {
+            // 2. Lectura cardinal + buffer de combinacion simultanea (ej. W+D, S+A)
+            // Arriba: W (87), w (119), Flecha Arriba (131)
+            if ((key = 87) | (key = 119) | (key = 131)) {
+                let lastVDir = -1;
+                let vHold = 4;
+            }
+            // Abajo: S (83), s (115), Flecha Abajo (133)
+            if ((key = 83) | (key = 115) | (key = 133)) {
+                let lastVDir = 1;
+                let vHold = 4;
+            }
+            // Izquierda: A (65), a (97), Flecha Izquierda (130)
+            if ((key = 65) | (key = 97) | (key = 130)) {
+                let lastHDir = -1;
+                let hHold = 4;
+            }
+            // Derecha: D (68), d (100), Flecha Derecha (132)
+            if ((key = 68) | (key = 100) | (key = 132)) {
+                let lastHDir = 1;
+                let hHold = 4;
+            }
+
+            if ((hHold > 0) & (vHold > 0)) {
+                // Movimiento diagonal combinado
+                let dx = lastHDir * 3;
+                let dy = lastVDir * 3;
+            } else {
+                // Movimiento recto en un solo eje
+                if (hHold > 0) {
+                    let dx = lastHDir * 4;
+                }
+                if (vHold > 0) {
+                    let dy = lastVDir * 4;
+                }
+            }
+
+            if (hHold > 0) { let hHold = hHold - 1; }
+            if (vHold > 0) { let vHold = vHold - 1; }
         }
 
         if ((~(dx = 0)) | (~(dy = 0))) {
             do player.move(dx, dy);
         }
 
-        // ESPACIO (32): Lanza el Disco de Puntero
+        // ESPACIO (32): Lanza el Disco en la ultima direccion de movimiento
         if ((key = 32) & (~(disc.isActive()))) {
             do disc.launch(player.getX(), player.getY(), player.getAimX(), player.getAimY());
         }
@@ -212,18 +287,21 @@ class HacklineGame {
             do Sys.wait(16);
         }
 
-        // Pantalla de Game Over con reinicio instantaneo (R = 82)
+        // Pantalla de Game Over con reinicio instantáneo (R = 82, r = 114)
         do Output.moveCursor(11, 18);
-        do Output.printString("== PROCESO TERMINADO ==");
+        do printAndDispose("== PROCESO TERMINADO ==");
         do Output.moveCursor(13, 20);
-        do Output.printString("PUNTAJE FINAL: ");
+        do printAndDispose("PUNTAJE FINAL: ");
         do Output.printInt(score);
         do Output.moveCursor(15, 16);
-        do Output.printString("PRESIONA 'R' PARA REINICIAR");
+        do printAndDispose("PRESIONA ESPACIO (A) PARA REINICIAR");
 
         let key = 0;
-        while (~(key = 82)) {
+        while (~(key = 32)) {
             let key = Keyboard.keyPressed();
+        }
+        while (Keyboard.keyPressed() = 32) {
+            do Sys.wait(5);
         }
         return;
     }
@@ -234,6 +312,8 @@ class HacklineGame {
 
         do player.dispose();
         do disc.dispose();
+        do strAir.dispose();
+        do strReady.dispose();
 
         let i = 0;
         while (i < numEnemies) {

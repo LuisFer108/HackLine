@@ -1,16 +1,20 @@
+
 /**
- * "Disco de Puntero": Proyectil con cinematica 2D en enteros
+ * "Disco de Puntero": Proyectil con cinematica diagonal tipo Pong (Vx != 0, Vy != 0)
  * y rebote elastico contra las paredes del bus de datos.
  */
 class Disc {
     field int x, y;
     field int vx, vy;
     field int bounces;
+    field int defaultSideVx;
     field boolean active;
     field Array sprite;
 
     constructor Disc new() {
         let active = false;
+        let defaultSideVx = 6;
+
         let sprite = Array.new(8);
         let sprite[0] = 60;   // ..####..
         let sprite[1] = 126;  // .######.
@@ -23,6 +27,7 @@ class Disc {
         return this;
     }
 
+    /** Lanza el disco en linea recta o diagonal segun el ultimo movimiento */
     method void launch(int startX, int startY, int dirX, int dirY) {
         let x = startX;
         let y = startY;
@@ -32,6 +37,7 @@ class Disc {
         if ((vx = 0) & (vy = 0)) {
             let vy = -8;
         }
+
         let bounces = 0;
         let active = true;
         return;
@@ -69,8 +75,8 @@ class Disc {
             let bounces = bounces + 1;
         }
 
-        // El disco regresa al inventario tras 4 rebotes
-        if (bounces > 4) {
+        // El disco regresa al inventario tras 5 rebotes diagonales
+        if (bounces > 5) {
             let active = false;
         }
         return;

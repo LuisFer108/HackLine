@@ -43,9 +43,19 @@ class Player {
         if (y < 20)  { let y = 20; }
         if (y > 240) { let y = 240; }
 
-        // Actualizar vector de apuntado segun ultima direccion
-        let aimX = dx * 2;
-        let aimY = dy * 2;
+        // Guardar vector de apuntado exacto (diagonal o recto)
+        if ((~(dx = 0)) & (~(dy = 0))) {
+            if (dx > 0) { let aimX = 6; } else { let aimX = -6; }
+            if (dy > 0) { let aimY = 6; } else { let aimY = -6; }
+        } else {
+            if (dx > 0) { let aimX = 8; }
+            if (dx < 0) { let aimX = -8; }
+            if (dx = 0) { let aimX = 0; }
+
+            if (dy > 0) { let aimY = 8; }
+            if (dy < 0) { let aimY = -8; }
+            if (dy = 0) { let aimY = 0; }
+        }
         return;
     }
 
