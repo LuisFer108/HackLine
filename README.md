@@ -7,8 +7,7 @@
 ---
 
 ## Enlaces
-|---|---|
-| Video de funcionamiento y arquitectura | **[https://youtu.be/H8Tuf92exSs]** |
+| Video de funcionamiento y arquitectura | **https://youtu.be/H8Tuf92exSs** |
 
 ## Integrantes del equipo
 
